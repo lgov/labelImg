@@ -299,6 +299,7 @@ class Canvas(QWidget):
     def selectShape(self, shape):
         self.deSelectShape()
         shape.selected = True
+        print("canvas set selected shape %s" % shape)
         self.selectedShape = shape
         self.setHiding()
         self.selectionChanged.emit(True)

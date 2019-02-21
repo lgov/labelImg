@@ -132,6 +132,7 @@ class MainWindow(QMainWindow, WindowMixin):
 
         self.itemsToShapes = {}
         self.shapesToItems = {}
+        self.objectIdsToLabel = {}
         self.prevLabelText = ''
 
         listLayout = QVBoxLayout()
@@ -265,7 +266,7 @@ class MainWindow(QMainWindow, WindowMixin):
         create = action(getStr('crtBox'), self.createShape,
                         'w', 'new', getStr('crtBoxDetail'), enabled=False)
         delete = action(getStr('delBox'), self.deleteSelectedShape,
-                        'Delete', 'delete', getStr('delBoxDetail'), enabled=False)
+                        'Backspace', 'delete', getStr('delBoxDetail'), enabled=False)
         copy = action(getStr('dupBox'), self.copySelectedShape,
                       'Ctrl+D', 'copy', getStr('dupBoxDetail'),
                       enabled=False)
@@ -589,6 +590,7 @@ class MainWindow(QMainWindow, WindowMixin):
 
     def resetState(self):
         self.itemsToShapes.clear()
+        print("clearing all shapes")
         self.shapesToItems.clear()
         self.labelList.clear()
         self.filePath = None
@@ -596,6 +598,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.labelFile = None
         self.canvas.resetState()
         self.labelCoordinates.clear()
+        print("canvas selected shape: %s" % self.canvas.selectedShape)
 
     def currentItem(self):
         items = self.labelList.selectedItems()
@@ -686,10 +689,21 @@ class MainWindow(QMainWindow, WindowMixin):
         if not self.canvas.editing():
             return
         item = self.currentItem()
-        text = self.labelDialog.popUp(item.text())
+        if item is None:
+            return
+        shape = self.itemsToShapes[item]
+        text = self.labelDialog.popUp(shape.label)
         if text is not None:
-            item.setText(text)
-            item.setBackground(generateColorByText(text))
+            title = text
+            shape.label = text
+
+            if shape.object_id:
+                title = "%s - %s" % (shape.object_id, text)
+            item.setText(title)
+            item.setBackground(generateColorByText(shape.label))
+            if shape.object_id:
+                self.objectIdsToLabel[shape.object_id] = shape.label
+            shape.line_color = generateColorByText(shape.label)
             self.setDirty()
 
     # Tzutalin 20160906 : Add file list and dock to move faster
@@ -734,7 +748,11 @@ class MainWindow(QMainWindow, WindowMixin):
         else:
             shape = self.canvas.selectedShape
             if shape:
-                self.shapesToItems[shape].setSelected(True)
+                if self.shapesToItems.get(shape, None):
+                    # TODO: KeyError: <libs.shape.Shape object at 0x11bdbf278>
+                    self.shapesToItems[shape].setSelected(True)
+                else:
+                    print ("How did you manage to select a deleted shape?")
             else:
                 self.labelList.clearSelection()
         self.actions.delete.setEnabled(selected)
@@ -745,11 +763,16 @@ class MainWindow(QMainWindow, WindowMixin):
 
     def addLabel(self, shape):
         shape.paintLabel = self.displayLabelOption.isChecked()
-        item = HashableQListWidgetItem(shape.label)
+        title = shape.label
+        if shape.object_id:
+            title = "%s - %s" % (shape.object_id,shape.label)
+            self.objectIdsToLabel[shape.object_id] = shape.label
+        item = HashableQListWidgetItem(title)
         item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
         item.setCheckState(Qt.Checked)
         item.setBackground(generateColorByText(shape.label))
         self.itemsToShapes[item] = shape
+        print("setting shape %s" % shape)
         self.shapesToItems[shape] = item
         self.labelList.addItem(item)
         for action in self.actions.onShapesPresent:
@@ -761,12 +784,13 @@ class MainWindow(QMainWindow, WindowMixin):
             return
         item = self.shapesToItems[shape]
         self.labelList.takeItem(self.labelList.row(item))
+        print("deleting shape %s" % shape)
         del self.shapesToItems[shape]
         del self.itemsToShapes[item]
 
     def loadLabels(self, shapes):
         s = []
-        for label, points, line_color, fill_color, difficult in shapes:
+        for label, points, line_color, fill_color, difficult, object_id in shapes:
             shape = Shape(label=label)
             for x, y in points:
 
@@ -777,6 +801,13 @@ class MainWindow(QMainWindow, WindowMixin):
 
                 shape.addPoint(QPointF(x, y))
             shape.difficult = difficult
+            shape.object_id = object_id
+            # If this is qn object that we know already, update its label from the cache
+            if self.objectIdsToLabel.get(object_id, None):
+                if shape.label != self.objectIdsToLabel[object_id]:
+                    shape.label = self.objectIdsToLabel[object_id]
+                    self.setDirty()
+
             shape.close()
             s.append(shape)
 
@@ -806,7 +837,8 @@ class MainWindow(QMainWindow, WindowMixin):
                         fill_color=s.fill_color.getRgb(),
                         points=[(p.x(), p.y()) for p in s.points],
                        # add chris
-                        difficult = s.difficult)
+                        difficult = s.difficult,
+                        object_id = s.object_id)
 
         shapes = [format_shape(shape) for shape in self.canvas.shapes]
         # Can add differrent annotation formats here
@@ -846,13 +878,7 @@ class MainWindow(QMainWindow, WindowMixin):
 
     def labelItemChanged(self, item):
         shape = self.itemsToShapes[item]
-        label = item.text()
-        if label != shape.label:
-            shape.label = item.text()
-            shape.line_color = generateColorByText(shape.label)
-            self.setDirty()
-        else:  # User probably changed item visibility
-            self.canvas.setShapeVisible(shape, item.checkState() == Qt.Checked)
+        self.canvas.setShapeVisible(shape, item.checkState() == Qt.Checked)
 
     # Callback functions:
     def newShape(self):
