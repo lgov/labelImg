@@ -88,6 +88,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.defaultSaveDir = defaultSaveDir
         self.usingPascalVocFormat = True
         self.usingYoloFormat = False
+        self.usingMXNetRecFormat = False
 
         # For loading all image under a directory
         self.mImgList = []
@@ -494,6 +495,7 @@ class MainWindow(QMainWindow, WindowMixin):
             self.actions.save_format.setIcon(newIcon("format_voc"))
             self.usingPascalVocFormat = True
             self.usingYoloFormat = False
+            self.usingMXNetRecFormat = False
             LabelFile.suffix = XML_EXT
 
         elif save_format == FORMAT_YOLO:
@@ -501,11 +503,21 @@ class MainWindow(QMainWindow, WindowMixin):
             self.actions.save_format.setIcon(newIcon("format_yolo"))
             self.usingPascalVocFormat = False
             self.usingYoloFormat = True
+            self.usingMXNetRecFormat = False
+            LabelFile.suffix = TXT_EXT
+
+        elif save_format == FORMAT_MXNET_REC:
+            self.actions.save_format.setText(FORMAT_MXNET_REC)
+            self.actions.save_format.setIcon(newIcon("format_mxnet_rec"))
+            self.usingPascalVocFormat = False
+            self.usingYoloFormat = False
+            self.usingMXNetRecFormat = True
             LabelFile.suffix = TXT_EXT
 
     def change_format(self):
         if self.usingPascalVocFormat: self.set_format(FORMAT_YOLO)
-        elif self.usingYoloFormat: self.set_format(FORMAT_PASCALVOC)
+        elif self.usingYoloFormat: self.set_format(FORMAT_MXNET_REC)
+        elif self.usingMXNetRecFormat: self.set_format(FORMAT_PASCALVOC)
 
     def noShapes(self):
         return not self.itemsToShapes
